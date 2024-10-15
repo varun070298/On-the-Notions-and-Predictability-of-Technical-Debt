@@ -17,7 +17,7 @@ The impact of technical debt is great on the financial cost for development, man
 
 It is still unclear what aspects of a project impact and build upon the existing measure of technical debt. Hence in this experiment, the ultimate task is to try and estimate the generalisation error in predicting technical debt using software metrics, and adaptive learning methodology. As software metrics are considered to be absolute regardless of how they are estimated.
 
-The software metrics were compiled from an established data set; Qualitas.classCorpus, and the notions of technical debt were collected from three different Static analysis tools; SonarQube, Codiga, and CodeClimate.
+The software metrics were compiled from an established data set; Qualitas.classCorpus, the data set can found here: http://java.labsoft.dcc.ufmg.br/qualitas.class/index.html and the notions of technical debt were collected from three different Static analysis tools; SonarQube, Codiga, and CodeClimate.
 
 The adaptive learning methodology uses multiple parameters and multiple machine learning models, to remove any form of bias regarding the estimation.
 
