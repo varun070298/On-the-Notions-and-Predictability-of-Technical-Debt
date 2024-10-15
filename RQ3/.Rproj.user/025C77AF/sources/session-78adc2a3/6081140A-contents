@@ -1,0 +1,259 @@
+---
+title: "Varun RQ3 Evaluation"
+author: "Sebastian Hönel"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+bibliography: ./inst/refs.bib
+urlcolor: blue
+output:
+  bookdown::pdf_document2:
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+    toc_depth: 6
+    df_print: kable
+    keep_tex: no
+header-includes:
+- \usepackage{bm}
+- \usepackage{mathtools}
+- \usepackage{xurl}
+---
+
+```{r setoptions, echo=FALSE, warning=FALSE, message=FALSE}
+Sys.setenv(LANG = "en_US.UTF-8")
+Sys.setenv(LC_ALL = "en_US.UTF-8")
+Sys.setenv(LC_CTYPE = "en_US.UTF-8")
+library(knitr)
+opts_chunk$set(tidy = TRUE, tidy.opts = list(indent=2))
+```
+
+```{r echo=FALSE}
+curve2 <- function(func, from, to, col = "black", lty = 1, lwd = 1, add = FALSE, xlab = NULL, ylab = NULL, xlim = NULL, ylim = NULL, main = NULL, ...) {
+	f <- function(x) func(x)
+	curve(expr = f, from = from, to = to, col = col, lty = lty, lwd = lwd, add = add, xlab = xlab, ylab = ylab, xlim = xlim, ylim = ylim, main = main, ... = ...)
+}
+```
+
+
+
+# Load The Data
+
+```{r}
+td.notions <- c("CodeClimate", "Codiga", "SonarQube")
+data <- NULL
+
+for (tdn in td.notions) {
+  temp <- read.csv(file = paste0("data/", tdn, "_debt_results.csv"), header = TRUE)
+  temp$Notion <- tdn
+  data <- rbind(data, temp)
+}
+data$Model_type <- factor(x = data$Model_type, levels = unique(data$Model_type))
+data$PCA <- as.logical(data$PCA)
+data$Domain <- as.logical(data$Domain)
+data$Notion <- factor(x = data$Notion, levels = unique(data$Notion))
+temp <- NULL
+```
+
+
+# Which Notion Can We Predict Best?
+
+We know that the TD notions of Codiga and SonarQube differ (e.g., it is much more common to have a large value for the latter, see Figure \ref{fig:typical-values}).
+This makes them difficult to compare.
+However, we can transform the corpus' projects' TD into CDFs and *normalize* the predicted values.
+In other words, the CDF-transformation will give us results that we can compare.
+
+
+```{r typical-values, echo=FALSE, fig.width=12, fig.height=7, fig.cap="Distribution of technical debt for all three notions in the Qualitas.class corpus."}
+par(mfrow = c(2, 3))
+TD <- read.csv(file = "data/TD.csv", header = TRUE)
+
+for (tdn in td.notions) {
+  temp <- TD[[paste0(tdn, "_debt")]]
+  plot(density(temp, bw = "SJ"), xlim = c(0, quantile(temp, 0.975)), main = paste0("PDF of ", tdn), sub = paste0("mean=", round(mean(temp))))
+  abline(v = mean(temp))
+  grid()
+}
+
+cdfs <- list()
+for (tdn in td.notions) {
+  # We'll estimate a density and then take its CDF
+  cdfs[[tdn]] <- (function() {
+    temp <- TD[[paste0(tdn, "_debt")]]
+    bw <- bw.SJ(x = temp)
+    Vectorize(function(x) 1 / length(temp) * sum(pnorm((x - temp) / bw)))
+  })()
+  
+  curve2(func = cdfs[[tdn]], from = min(TD[[paste0(tdn, "_debt")]]), to = quantile(temp, 0.975), main = paste0("CDF of ", tdn))
+  grid()
+}
+temp <- NULL
+```
+
+
+Now we got **four** different flavors per TD notion: With/without Domain and with/without performing PCA on the data.
+We also obtained $1,000$ RMSEs/MAEs per flavor.
+If we consider the MAE here, it is the mean absolute difference between the actual and predicted TD.
+If we take the obtained MAEs and convert them into probabilities using the corresponding CDFs, we will get a good idea for each flavor of estimator whether it predicts low or high deviations.
+Using the CDFs also allows us then to compare these results, which would otherwise not have been possible.
+The last dimensions we need to consider here is the used **model**.
+The result is shown in Table \ref{tab:comparison}.
+
+
+```{r}
+comparison <- NULL
+use.grid <- expand.grid(list(keep_Domain=c(TRUE, FALSE), do_PCA=c(TRUE,FALSE)))
+
+for (tdn in td.notions) {
+  for (model_type in levels(data$Model_type)) {
+    temp <- `rownames<-`(x = matrix(nrow = 1, ncol = 4), value = paste0(tdn, "_", model_type))
+    
+    use.labels <- c()
+    for (idx in 1:nrow(use.grid)) {
+      row <- use.grid[idx,]
+      use.labels <- c(use.labels, paste0(if (row$keep_Domain) "WithDomain" else "NoDomain", "_", if (row$do_PCA) "UsePCA" else "NoPCA"))
+      temp[1, idx] <- mean(cdfs[[tdn]](
+        data[data$Notion == tdn & data$Model_type == model_type & data$Domain == row$keep_Domain & data$PCA == row$do_PCA,]$MAE))
+    }
+    
+    comparison <- rbind(comparison, `colnames<-`(x = temp, value = use.labels))
+  }
+}
+```
+
+
+```{r echo=FALSE}
+if (interactive()) {
+  comparison
+} else {
+  knitr::kable(x = comparison, booktabs = TRUE, label = "comparison", caption = "Showing all three notions of TD, grid configurations, and models.")
+}
+```
+
+
+The above results tell us the following: the lower the average value, the better the flavor.
+The best value for CodeClimate is **XGB**, **including domain**, **not doing PCA** ($\approx0.709$).
+The same flavor is the best for Codiga ($\approx0.577$), as well as SonarQube ($\approx0.718$).
+
+That also means, Codiga $>$ CodeClimate $\approx$ SonarQube in terms of what we can predict best.
+
+
+Let's show the distributions of the original and CDF-normalized MAEs (Figure \ref{fig:mae-distr}):
+
+```{r mae-distr, echo=FALSE, fig.height=12, fig.width=12, fig.cap="The distributions of MAEs, per notion of TD. Shown is the PDF and CDF of the original MAEs, as well as the PDF and CDF of the CDF-transformed MAEs so that we can compare."}
+par(mfrow = c(4,3))
+
+for (tdn in td.notions) {
+  temp <- data[data$Notion == tdn & data$Model_type == "XGB" & data$Domain == TRUE & data$PCA == FALSE,]$MAE
+  temp.test <- shapiro.test(x = temp)
+  plot(density(temp, bw = "SJ"), main = paste0(tdn, " (org)"), sub = paste0("Shapiro W=", round(temp.test$statistic, 3), ", p-value=", temp.test$p.value))
+  abline(v = mean(temp))
+  grid()
+}
+
+for (tdn in td.notions) {
+  plot(ecdf(data[data$Notion == tdn & data$Model_type == "XGB" & data$Domain == TRUE & data$PCA == FALSE,]$MAE),
+    main = paste0(tdn, " (CDF of org)"))
+  grid()
+}
+
+for (tdn in td.notions) {
+  plot(density(cdfs[[tdn]](
+    data[data$Notion == tdn & data$Model_type == "XGB" & data$Domain == TRUE & data$PCA == FALSE,]$MAE), bw = "SJ"),
+    main = paste0(tdn, " (CDF-normalized)"))
+  grid()
+}
+
+for (tdn in td.notions) {
+  plot(ecdf(cdfs[[tdn]](
+    data[data$Notion == tdn & data$Model_type == "XGB" & data$Domain == TRUE & data$PCA == FALSE,]$MAE)),
+    main = paste0(tdn, " (CDF-normalized ECDF)"))
+  grid()
+}
+```
+
+
+I also include the test for normality. As you see, none of the residual MAEs are normally distributed, nor do they have a unimodal distribution (the residual MAEs for SonarQube are almost normal though).
+Therefore, we can only apply Chebyshev's inequality for estimating confidence intervals [@chebyshev1867].
+
+
+We really only should use the last row to compare how well we can predict the different notions of technical debt.
+For CodeClimate and SonarQube, we actually do not get models that achieve scores $>\approx0.5$.
+
+
+
+# Continuous Confidence Intervals
+
+In Table \ref{tab:confidence-steps} shows the three-sigma rule, as well as Chebyshev's rule (I only include the three-sigma rule as demonstration, but it is not applicable here).
+It shows that, for example, only for very low confidences, we expect our champion model to deviate rather slightly from the expected mean MAE.
+For example, our confidence is only $5$% that the predictions for the type of champion model on Codiga's TD notion deviates between $312$ and $837$ around a mean of $575$.
+In other words, even the champion model is "usually" (on average) of by $575$. However, it may be off less (down to $312$) or more (up to $837$). We can "guarantee" this with a confidence of 5%.
+
+
+Such a low confidence has no real practical usage.
+So, if we look at a more reasonable example, say, $90$%, the deviation from the expectation (mean) must be more extreme.
+Note that I limited the models so they can only predict values $>=0$.
+So with $90$% confidence, the deviation from the actual technical debt, for Codiga, is $<\approx1,383$.
+
+
+Recall that a typical value for Codiga's notion of technical debt is $929$.
+In other words, running Codiga on a random project will on average yield a TD of $929$.
+If we're off by more than $1,300$, it could mean that we predict (roughly) that a project has no TD when it actually has TD, or that we predict the TD to be much higher.
+These are just examples off how "off" we could be with those $90$%.
+
+
+But here is where it also gets interesting.
+Suppose you are happy with a lower confidence, just to get "ballpark" kind of figures.
+So if, e.g., $50$% confidence is enough, this predictor might become useful.
+Let's say you are dealing with projects that usually have a very high TD, then being off by $\approx1,000$ is perhaps acceptable for getting a first quick impression.
+Remember that this here is a trade-off; evaluating TD is perhaps really expensive in real-life, as you need experts who have to do this qualitatively, evaluating lots of unstructured data [@Matsubara2021].
+
+
+```{r warning=FALSE, message=FALSE}
+library(dplyr)
+```
+
+
+```{r}
+temp.df <- data.frame(
+  Confidence = sort(c(seq(from = 5, to = 95, by = 10), 50, 80, 90, 68.27, 95.45, 97.5, 98))
+) %>% group_by(Confidence) %>% summarize(
+  Low = max(0, round(qnorm(c(.5 - Confidence / 200), mean = mean(temp), sd = sd(temp)), 4)),
+  Mean1 = round(mean(temp), 2),
+  High = round(qnorm(c(.5 + Confidence / 200), mean = mean(temp), sd = sd(temp)), 4),
+  Chebyshev_Low = max(0, round(mean(temp) - sd(temp) * sqrt(1 / (1 - Confidence / 100)), 4)),
+  Mean2 = round(mean(temp), 2),
+  Chebyshev_High = round(mean(temp) + sd(temp) * sqrt(1 / (1 - Confidence / 100)), 4),
+  .groups = "drop")
+```
+
+
+```{r echo=FALSE}
+if (interactive()) {
+  temp.df
+} else {
+  knitr::kable(x = temp.df, booktabs = TRUE, label = "confidence-steps", caption = "Confidence in relation to inequalities.")
+}
+```
+
+\clearpage
+
+# References {-}
+
+<div id="refs"></div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

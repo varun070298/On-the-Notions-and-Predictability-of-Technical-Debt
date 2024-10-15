@@ -1,0 +1,7 @@
+"0",""
+"0","for (tdn in td.notions) {"
+"0","  plot(density(cdfs[[tdn]]("
+"0","    data[data$Notion == tdn & data$Model_type == ""XGB"" & data$Domain == TRUE & data$PCA == FALSE,]$MAE), bw = ""SJ""),"
+"0","    main = paste0(tdn, "" (CDF-normalized)""))"
+"0","  grid()"
+"0","}"

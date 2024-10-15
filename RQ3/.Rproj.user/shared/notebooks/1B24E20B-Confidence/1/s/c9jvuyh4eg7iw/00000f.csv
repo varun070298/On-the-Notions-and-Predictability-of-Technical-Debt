@@ -1,0 +1,4 @@
+"0","curve2 <- function(func, from, to, col = ""black"", lty = 1, lwd = 1, add = FALSE, xlab = NULL, ylab = NULL, xlim = NULL, ylim = NULL, main = NULL, ...) {"
+"0","	f <- function(x) func(x)"
+"0","	curve(expr = f, from = from, to = to, col = col, lty = lty, lwd = lwd, add = add, xlab = xlab, ylab = ylab, xlim = xlim, ylim = ylim, main = main, ... = ...)"
+"0","}"
