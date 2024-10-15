@@ -41,3 +41,9 @@ RQ3
 Can a regression model trained on low-level metrics for predicting technical debt achieve an acceptable performance?
 
 The Final Report is available here: https://lnu.diva-portal.org/smash/record.jsf?pid=diva2%3A1794704&dswid=-3082
+
+## Data
+
+The size of the CSVs was too big so it was compressed into a zip file.
+
+The most useful data can also be found at: https://zenodo.org/records/7981663
