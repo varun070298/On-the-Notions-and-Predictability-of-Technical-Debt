@@ -37,5 +37,6 @@ RQ2[a]
 Which score(s) correlate most significantly with technical debt?
 
 RQ3
+
 Can a regression model trained on low-level metrics for predicting technical debt achieve an acceptable performance?
 
